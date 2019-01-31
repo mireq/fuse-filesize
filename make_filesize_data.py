@@ -9,6 +9,11 @@ import sys
 inodes_reg = set()
 
 
+DIR_ITEM = 0
+DIR_ENTRY = 1
+FILE_ENTRY = 2
+
+
 def make_local_name(base_dir, directory, filename):
 	filename = os.path.join(directory, filename)
 	filename = filename[len(base_dir):]
@@ -19,13 +24,13 @@ def make_local_name(base_dir, directory, filename):
 
 def write_dir_item(local_name, st, output):
 	local_name = local_name.encode('utf-8', 'replace')
-	output.write(struct.pack('bQH', 0, st.st_size, len(local_name)))
+	output.write(struct.pack('bQH', DIR_ITEM, st.st_size, len(local_name)))
 	output.write(local_name)
 
 
 def write_entry_item(local_name, is_file, st, output):
 	local_name = local_name.encode('utf-8', 'replace')
-	output.write(struct.pack('bQH', 2 if is_file else 1, st.st_size, len(local_name)))
+	output.write(struct.pack('bQH', FILE_ENTRY if is_file else DIR_ENTRY, st.st_size, len(local_name)))
 	output.write(local_name)
 
 

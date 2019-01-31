@@ -1,11 +1,16 @@
 # -*- coding: utf-8 -*-
+import errno
+import os
+import stat
+import struct
+
 import fuse
 from fuse import Fuse
-import argparse
-import struct
-import errno
-import stat
-import os
+
+
+DIR_ITEM = 0
+DIR_ENTRY = 1
+FILE_ENTRY = 2
 
 
 if not hasattr(fuse, '__version__'):
@@ -54,16 +59,16 @@ class FilesizeFuse(Fuse):
 			header = fp.read(header_size)
 			if len(header) != header_size:
 				break
-			is_file, filesize, stringsize = struct.unpack('?QH', header)
+			mode, filesize, stringsize = struct.unpack('bQH', header)
 			filename = fp.read(stringsize)
 			if len(filename) != stringsize:
 				break
 			filename = filename.decode('utf-8', 'replace')
-			if is_file:
-				self.dirs[dirname][filename] = filesize
-			else:
+			if mode == DIR_ITEM:
 				dirname = filename
 				self.dirs[dirname] = {}
+			else:
+				self.dirs[dirname][filename] = filesize
 
 	def getattr(self, path):
 		st = Stat()
