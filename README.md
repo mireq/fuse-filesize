@@ -22,3 +22,5 @@ Then we move `filesize_data` file to another machine and mount this file.
 mkdir mnt
 python filesize_fuse.py --stats_file filesize_data mnt
 ```
+
+![Filelight](https://raw.githubusercontent.com/wiki/mireq/fuse-filesize/filelight.png)
