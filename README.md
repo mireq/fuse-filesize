@@ -16,7 +16,7 @@ First create file list (on remote server or local machine).
 python3 make_filesize_data.py / ~/filesize_data
 ```
 
-Then we move `filesize_data` file to another machine and mount this file.
+Then move `filesize_data` file to another machine and mount this file.
 
 ```
 mkdir mnt
