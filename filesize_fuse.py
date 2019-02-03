@@ -110,7 +110,7 @@ class FilesizeFuse(Fuse):
 		else: #  directory
 			st = Stat()
 			st.st_mode = stat.S_IFDIR | 0o755
-			st.st_nlink = len(self.dirs[path])
+			st.st_nlink = len(self.dirs[path]) + 2
 			return st
 
 	def readdir(self, path, offset):
