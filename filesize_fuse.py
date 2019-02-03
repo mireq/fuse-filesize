@@ -8,9 +8,12 @@ import fuse
 from fuse import Fuse
 
 
-DIR_ITEM = 0
-DIR_ENTRY = 1
-FILE_ENTRY = 2
+NAME_STRUCT = 'H'
+ENTRY_HEADER_STRUCT = '?Q'
+TERMINATOR_NAME = b''
+
+NAME_HEADER_SIZE = struct.calcsize(NAME_STRUCT)
+ENTRY_HEADER_SIZE = struct.calcsize(ENTRY_HEADER_STRUCT)
 
 
 if not hasattr(fuse, '__version__'):
@@ -18,6 +21,25 @@ if not hasattr(fuse, '__version__'):
 
 
 fuse.fuse_python_api = (0, 2)
+
+
+def read_name(fp):
+	name_header_bytes = fp.read(NAME_HEADER_SIZE)
+	if len(name_header_bytes) != NAME_HEADER_SIZE:
+		return None
+	(size,) = struct.unpack(NAME_STRUCT, name_header_bytes)
+	name = fp.read(size)
+	if len(name) != size:
+		return None
+	return name
+
+
+def read_entry_header(fp):
+	entry_header_bytes = fp.read(ENTRY_HEADER_SIZE)
+	if len(entry_header_bytes) != ENTRY_HEADER_SIZE:
+		return None
+	(is_dir, size,) = struct.unpack(ENTRY_HEADER_STRUCT, entry_header_bytes)
+	return (is_dir, size)
 
 
 class Stat(fuse.Stat):
@@ -38,7 +60,7 @@ class FilesizeFuse(Fuse):
 	def __init__(self, *args, **kwargs):
 		super().__init__(*args, **kwargs)
 		self.stats_file = ''
-		self.dirs = {'/': {}}
+		self.dirs = {}
 
 	def main(self, *args, **kwargs):
 		self.read_stats()
@@ -53,22 +75,21 @@ class FilesizeFuse(Fuse):
 		fp.close()
 
 	def read_stats_file(self, fp):
-		header_size = struct.calcsize('?QH')
 		dirname = '/'
+		self.dirs = {'/': {}}
 		while True:
-			header = fp.read(header_size)
-			if len(header) != header_size:
-				break
-			mode, filesize, stringsize = struct.unpack('bQH', header)
-			filename = fp.read(stringsize)
-			if len(filename) != stringsize:
-				break
-			filename = filename.decode('utf-8', 'replace')
-			if mode == DIR_ITEM:
-				dirname = filename
+			name = read_name(fp)
+			if name is None:
+				return
+			if name == TERMINATOR_NAME:
+				dirname = os.path.dirname(dirname)
+				continue
+			is_dir, size = read_entry_header(fp)
+			name = name.decode('utf-8', 'replace')
+			self.dirs[dirname][name] = size
+			if is_dir:
+				dirname = os.path.join(dirname, name)
 				self.dirs[dirname] = {}
-			else:
-				self.dirs[dirname][filename] = filesize
 
 	def getattr(self, path):
 		st = Stat()
@@ -91,14 +112,13 @@ class FilesizeFuse(Fuse):
 		return st
 
 	def readdir(self, path, offset):
-		if path not in self.dirs:
+		direntry = self.dirs.get(path)
+		if direntry is None:
 			return -errno.ENOENT
 
-		direntry = self.dirs[path]
-		files = list(direntry.keys())
-		files.sort()
-		files = ['.', '..'] + files
-		for f in files:
+		yield fuse.Direntry('.')
+		yield fuse.Direntry('..')
+		for f in direntry.keys():
 			yield fuse.Direntry(f)
 
 

@@ -4,77 +4,83 @@ import os
 import stat
 import struct
 import sys
+from collections import namedtuple
 
 
 inodes_reg = set()
 
 
-DIR_ITEM = 0
-DIR_ENTRY = 1
-FILE_ENTRY = 2
+NAME_STRUCT = 'H'
+ENTRY_HEADER_STRUCT = '?Q'
+TERMINATOR_NAME = b''
 
 
-def make_local_name(base_dir, directory, filename):
-	filename = os.path.join(directory, filename)
-	filename = filename[len(base_dir):]
-	if filename[0] != '/':
-		filename = '/' + filename
-	return filename
+DirEntryInfo = namedtuple('DirEntryInfo', ['is_dir', 'size', 'browsable'])
 
 
-def write_dir_item(local_name, st, output):
-	local_name = local_name.encode('utf-8', 'replace')
-	output.write(struct.pack('bQH', DIR_ITEM, st.st_size, len(local_name)))
-	output.write(local_name)
+def write_name(name, output):
+	output.write(struct.pack(NAME_STRUCT, len(name)))
+	output.write(name)
 
 
-def write_entry_item(local_name, is_file, st, output):
-	local_name = local_name.encode('utf-8', 'replace')
-	output.write(struct.pack('bQH', FILE_ENTRY if is_file else DIR_ENTRY, st.st_size, len(local_name)))
-	output.write(local_name)
+def write_entry_header(info, output):
+	output.write(struct.pack(ENTRY_HEADER_STRUCT, info.is_dir, info.size))
 
 
-def write_dir(base_dir, directory, output):
+def write_dir_content(directory, output):
 	try:
-		files = [f for f in os.listdir(directory) if os.path.isfile(os.path.join(directory, f)) or os.path.islink(os.path.join(directory, f))]
-		dirs = [f for f in os.listdir(directory) if os.path.isdir(os.path.join(directory, f)) and not os.path.islink(os.path.join(directory, f))]
+		files = list(os.listdir(directory))
 	except (OSError, IOError):
-		return
-	files.sort()
-	dirs.sort()
+		pass
+
 	for f in files:
 		path = os.path.join(directory, f)
-		try:
-			st = os.stat(path)
-		except (OSError, IOError):
+		f = f.encode('utf-8', 'replace')
+		if len(f) == 0:
 			continue
-		if not stat.S_ISREG(st.st_mode):
+		info = get_info(path)
+		if info is None:
 			continue
-		if st.st_ino in inodes_reg:
-			continue
-		inodes_reg.add(st.st_ino)
-		write_entry_item(f, True, st, output)
-	for f in dirs:
-		path = os.path.join(directory, f)
-		try:
-			st = os.stat(path)
-		except (OSError, IOError):
-			continue
-		write_entry_item(f, False, st, output)
-	for f in dirs:
-		path = os.path.join(directory, f)
-		try:
-			st = os.stat(path)
-		except (OSError, IOError):
-			continue
-		local_name = make_local_name(base_dir, directory, f)
-		write_dir_item(local_name, st, output)
-		if not os.path.ismount(path):
-			write_dir(base_dir, path, output)
+		if info.is_dir:
+			write_dir(info, path, f, output)
+		else:
+			write_file(info, f, output)
+
+
+def write_dir(info, directory, dirname, output):
+	write_name(dirname, output)
+	write_entry_header(info, output)
+	write_dir_content(directory, output)
+	write_name(TERMINATOR_NAME, output)
+
+
+def write_file(info, filename, output):
+	write_name(filename, output)
+	write_entry_header(info, output)
+
+
+def get_info(path):
+	browsable = False
+	try:
+		is_dir = os.path.isdir(path) and not os.path.islink(path)
+		if is_dir and not os.path.ismount(path): # browse only not mounted directories
+			browsable = True
+		st = os.stat(path)
+	except (OSError, IOError):
+		return
+
+	if not is_dir and not stat.S_ISREG(st.st_mode): # skip special files
+		return
+
+	if st.st_ino in inodes_reg: # skip hard links
+		return
+	inodes_reg.add(st.st_ino)
+
+	return DirEntryInfo(is_dir, st.st_size, browsable)
 
 
 def analyze(directory, output):
-	write_dir(directory, directory, output)
+	write_dir_content(directory, output)
 
 
 def main():
