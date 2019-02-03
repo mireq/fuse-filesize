@@ -10,6 +10,7 @@ from collections import namedtuple
 inodes_reg = set()
 
 
+BLOCK_SIZE = 512
 NAME_STRUCT = 'H'
 ENTRY_HEADER_STRUCT = '?Q'
 TERMINATOR_NAME = b''
@@ -76,7 +77,7 @@ def get_info(path):
 		return
 	inodes_reg.add(st.st_ino)
 
-	return DirEntryInfo(is_dir, st.st_size, browsable)
+	return DirEntryInfo(is_dir, st.st_blocks * BLOCK_SIZE, browsable)
 
 
 def analyze(directory, output):
