@@ -92,24 +92,26 @@ class FilesizeFuse(Fuse):
 				self.dirs[dirname] = {}
 
 	def getattr(self, path):
-		st = Stat()
-		if path in self.dirs:
-			st.st_mode = stat.S_IFDIR | 0o755
-			st.st_nlink = len(self.dirs[path])
-		else:
+		direntry = self.dirs.get(path)
+		if direntry is None: # file
 			parent_dir = os.path.dirname(path)
 			basename = os.path.basename(path)
-			if parent_dir in self.dirs:
-				direntry = self.dirs[parent_dir]
-				if basename in direntry:
-					st.st_mode = stat.S_IFREG | 0o444
-					st.st_nlink = 1
-					st.st_size = direntry[basename]
-				else:
-					return -errno.ENOENT
-			else:
+			direntry = self.dirs.get(parent_dir)
+			if direntry is None:
 				return -errno.ENOENT
-		return st
+			fileentry = direntry.get(basename)
+			if fileentry is None:
+				return -errno.ENOENT
+			st = Stat()
+			st.st_mode = stat.S_IFREG | 0o444
+			st.st_nlink = 1
+			st.st_size = direntry[basename]
+			return st
+		else: #  directory
+			st = Stat()
+			st.st_mode = stat.S_IFDIR | 0o755
+			st.st_nlink = len(self.dirs[path])
+			return st
 
 	def readdir(self, path, offset):
 		direntry = self.dirs.get(path)
