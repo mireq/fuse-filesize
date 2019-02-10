@@ -73,9 +73,10 @@ def get_info(path):
 	if not is_dir and not stat.S_ISREG(st.st_mode): # skip special files
 		return
 
-	if st.st_ino in inodes_reg: # skip hard links
-		return
-	inodes_reg.add(st.st_ino)
+	if not is_dir and st.st_nlink > 1:
+		if st.st_ino in inodes_reg: # skip hard links
+			return
+		inodes_reg.add(st.st_ino)
 
 	return DirEntryInfo(is_dir, st.st_blocks * BLOCK_SIZE, browsable)
 
