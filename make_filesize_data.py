@@ -51,7 +51,8 @@ def write_dir_content(directory, output):
 def write_dir(info, directory, dirname, output):
 	write_name(dirname, output)
 	write_entry_header(info, output)
-	write_dir_content(directory, output)
+	if info.browsable:
+		write_dir_content(directory, output)
 	write_name(TERMINATOR_NAME, output)
 
 
